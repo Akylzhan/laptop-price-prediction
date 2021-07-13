@@ -17,7 +17,7 @@ def get_all_laptops(webdriver_browser):
     laptop_links = {}
 
     for url, count in urls:
-        for page in range(count // 12 + 1):
+        for page in tqdm(range(count // 12 + 1)):
             webdriver_browser.get(url.format(page))
 
             soup = BeautifulSoup(webdriver_browser.page_source, features="html.parser")
@@ -36,14 +36,13 @@ def parse_price(price_str):
     return float(price_str)
 
 
-def parse_desc(desc_str):
+def parse_desc(terms, definitions):
     desc = {}
 
-    desc_str = desc_str.strip().split("\n")
-    desc_str = [param[2:].split(": ") for param in desc_str]
-    desc_str = {key: value for key, value in desc_str}
+    for term, definition in zip(terms, definitions):
+        desc[term.text.strip()] = definition.text.strip()
 
-    return desc_str
+    return desc
 
 
 def parse_laptops(webdriver_browser, laptop_links):
@@ -60,27 +59,27 @@ def parse_laptops(webdriver_browser, laptop_links):
 
         soup = BeautifulSoup(webdriver_browser.page_source, features="html.parser")
         price = soup.find("div", {"class": "item__price-once"})
-        description = soup.find("div", {"class": "item__description-text"})
+        desc_terms = soup.findAll("span", {"class": "specifications-list__spec-term-text"})
+        desc_definitions = soup.findAll("dd", {"class": "specifications-list__spec-definition"})
 
-        if price is None or description is None:
-            print(link['link'])
+        if price is None:
             price = soup.find("div", {"class": "sellers-table__price-cell-text"})
             if price is None:
+                print(link['link'])
                 continue
 
-        laptop = parse_desc(description.text)
+        laptop = parse_desc(desc_terms, desc_definitions)
         laptop["price"] = parse_price(price.text)
         laptop["link"] = link["link"]
 
         laptops[name] = laptop
 
-
     return laptops
 
 
 def main(webdriver_browser):
-    laptop_links = get_all_laptops(webdriver_browser)
-    laptops = parse_laptops(webdriver_browser, laptop_links)
+    laptops_links = get_all_laptops(webdriver_browser)
+    laptops = parse_laptops(webdriver_browser, laptops_links)
 
     with open("data/laptops.json", "w") as file:
         json.dump(laptops, file)
@@ -89,8 +88,9 @@ def main(webdriver_browser):
 if __name__ == "__main__":
     options = webdriver.ChromeOptions()
     options.add_argument("headless")
+    options.add_argument("--disable-gpu")
     browser = webdriver.Chrome(options=options)
-    browser.set_page_load_timeout(5)
+    browser.set_page_load_timeout(30)
 
     main(browser)
 
